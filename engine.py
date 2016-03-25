@@ -35,44 +35,6 @@ def commitCloudFile(filename):
 		print "HttpError thrown during a commit: " + str(details)
 		return "httperror"
 
-#Usage: downloadCloudFile("C:/Code/fetch_earth.py")
-def downloadCloudFile(filename):
-	out_file = open(filename, "w+")
-	bucket = "horizon_data_bucket"
-	filename = uid + "/" + filename
-	service = create_service()
-
-	# Use get_media instead of get to get the actual contents of the object.
-	try:
-		req = service.objects().get_media(bucket=bucket, object=filename)
-
-		downloader = http.MediaIoBaseDownload(out_file, req)
-		
-		done = False
-		while done is False:
-			status, done = downloader.next_chunk()
-
-		return out_file
-	except HttpError, details:
-		print "HttpError thrown during a download: " + str(details)
-		return None
-
-#Usage: pprint.pprint(deleteCloudFile("C:/Code/fetch_earth.py"))
-def deleteCloudFile(filename):
-	bucket = "horizon_data_bucket"
-	filename = uid + "/" + filename
-	service = create_service()
-
-	req = service.objects().delete(bucket=bucket, object=filename)
-	try:
-		resp = req.execute()
-		#If successful, returns ''
-		#If not, throws exception otherwise
-		return resp
-	except HttpError, details:
-		print "HttpError thrown during a delete: " + str(details)
-		return None
-
 def secToDay(seconds):
 	return seconds/60/60/24
 
@@ -83,14 +45,17 @@ def sweep(rootdir):
 	for dirname, subdirlist, filelist in os.walk(rootdir):
 		for fname in filelist:
 			fullname = dirname + "/" + fname
-			#Check if file is already a shortcut (and therefore saved already
-			if not fname.endswith('.lnk') and not fname.endswith('.url'):
-				#Check if file has been used in the last 30 days
-				if secToDay(time.time() - os.path.getmtime(fullname)) > 30:
+			#Check to make sure file is not empty (in range)
+			if os.path.getsize(fullname) > 0:
+				#Check if file is already a shortcut (and therefore saved already
+				if not fname.endswith('.lnk') and not fname.endswith('.url'):
+					#Check if file has been used in the last 30 days
+					print fullname
+					#if secToDay(time.time() - os.path.getmtime(fullname)) > 30:
 					ingest(fullname)
 
 def ingest(filename):
-	result = downloadCloudFile(filename)
+	result = commitCloudFile(filename)
 	if result is not None:
 		os.remove(filename)
 		createShortcut(filename)
@@ -102,14 +67,13 @@ def createShortcut(filename):
 	shell = win32com.client.Dispatch("WScript.Shell")
 	shortcut = shell.CreateShortCut(new_filename + ".lnk")
 	#Get current directory assuming that the spawn script is in the same directory
-	shortcut.Targetpath = os.path.join(os.getcwd(), "horizon-spawn.py") + " " + filename
+	shortcut.Targetpath = os.path.join(os.getcwd(), "horizon-spawn.py")
+	shortcut.Arguments = filename
 	shortcut.save()
 
-def retrieveFileIcon(filetype):
-	pass
-
 def main():
-	commitCloudFile("C:/Code/fetch_earth.py")
+	sweep("C:/Code/test")
+	#downloadCloudFile("C:/Code/fetch_earth.py")
 
 if __name__ == "__main__":
 	main()
