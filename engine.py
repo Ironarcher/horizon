@@ -60,6 +60,22 @@ def ingest(filename):
 		os.remove(filename)
 		createShortcut(filename)
 
+#untested
+def getFileIcon(filename):
+	found = False
+	workdir = os.path.join(os.getcwd(),"exts")
+	new_filename, file_extension = os.path.splitext(filename)
+	sample_file = "example" + file_extension
+	for dirname, subdirlist, filelist in os.walk(workdir):
+		for fname in filelist:
+			if sample_file == fname:
+				found = True
+	if found:
+		return workdir + sample_file
+	else:
+		r = open(sample_file, 'w+')
+		r.close()
+
 def createShortcut(filename):
 	#Strip extension off
 	new_filename, file_extension = os.path.splitext(filename)
@@ -69,11 +85,20 @@ def createShortcut(filename):
 	#Get current directory assuming that the spawn script is in the same directory
 	shortcut.Targetpath = os.path.join(os.getcwd(), "horizon-spawn.py")
 	shortcut.Arguments = filename
+	shortcut.IconLocation = filename
 	shortcut.save()
 
+def getDefaultDirectory():
+	drive = os.getenv('SystemDrive')
+	user = os.getenv('username')
+	if drive is not None and user is not None:
+		return drive + "/Users/" + user
+	else:
+		print "Critical drive or user error (missing environment variable)"
+
 def main():
-	sweep("C:/Code/test")
-	#downloadCloudFile("C:/Code/fetch_earth.py")
+	test = "C:\Users\Arpad\photondocs"
+	sweep(test)
 
 if __name__ == "__main__":
 	main()
