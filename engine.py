@@ -1,6 +1,7 @@
 import os
 import sys
-import pprint
+import time
+import win32com.client
 from googleapiclient import discovery
 from googleapiclient import http
 from googleapiclient.errors import HttpError
@@ -72,8 +73,43 @@ def deleteCloudFile(filename):
 		print "HttpError thrown during a delete: " + str(details)
 		return None
 
-def main():
+def secToDay(seconds):
+	return seconds/60/60/24
+
+def sweep(rootdir):
+	#dirname is the name of the directory
+	#subdirlist is a list of all of the folders under the current directory
+	#filelist is a list of all files in the current directory
+	for dirname, subdirlist, filelist in os.walk(rootdir):
+		for fname in filelist:
+			fullname = dirname + "/" + fname
+			#Check if file is already a shortcut (and therefore saved already
+			if not fname.endswith('.lnk') and not fname.endswith('.url'):
+				#Check if file has been used in the last 30 days
+				if secToDay(time.time() - os.path.getmtime(fullname)) > 30:
+					ingest(fullname)
+
+def ingest(filename):
+	result = downloadCloudFile(filename)
+	if result is not None:
+		os.remove(filename)
+		createShortcut(filename)
+
+def createShortcut(filename):
+	#Strip extension off
+	new_filename, file_extension = os.path.splitext(filename)
+
+	shell = win32com.client.Dispatch("WScript.Shell")
+	shortcut = shell.CreateShortCut(new_filename + ".lnk")
+	#Get current directory assuming that the spawn script is in the same directory
+	shortcut.Targetpath = os.path.join(os.getcwd(), "horizon-spawn.py") + " " + filename
+	shortcut.save()
+
+def retrieveFileIcon(filetype):
 	pass
+
+def main():
+	commitCloudFile("C:/Code/fetch_earth.py")
 
 if __name__ == "__main__":
 	main()
