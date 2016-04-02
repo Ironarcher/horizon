@@ -1,4 +1,0 @@
-Drivers\
-Program Files\
-Program Files (x86)\
-Windows\

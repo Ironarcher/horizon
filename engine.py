@@ -2,10 +2,21 @@ import os
 import sys
 import time
 import win32com.client
+import subprocess
+from _winreg import *
 from googleapiclient import discovery
 from googleapiclient import http
 from googleapiclient.errors import HttpError
 from oauth2client.client import GoogleCredentials
+
+#Make sure that the registry allows folders to report the date they were recently accessed
+def check_reg_file_access_date():
+	key = OpenKey(HKEY_LOCAL_MACHINE, r'SYSTEM\CurrentControlSet\Control\FileSystem', 0, KEY_READ)
+	if QueryValueEx(key, "NtfsDisableLastAccessUpdate")[0] is not 0:
+		#Edit key to zero value or report error (program will not function)
+		#TO-DO
+		print("Please enable recent file access date data collection")
+	CloseKey(key)
 
 #User identification (temporary)
 uid = "akovesdy17"
@@ -38,7 +49,7 @@ def commitCloudFile(filename):
 def secToDay(seconds):
 	return seconds/60/60/24
 
-def sweep(rootdir):
+def user_file_sweep(rootdir):
 	#dirname is the name of the directory
 	#subdirlist is a list of all of the folders under the current directory
 	#filelist is a list of all files in the current directory
@@ -51,8 +62,33 @@ def sweep(rootdir):
 				if not fname.endswith('.lnk') and not fname.endswith('.url'):
 					#Check if file has been used in the last 30 days
 					print fullname
-					#if secToDay(time.time() - os.path.getmtime(fullname)) > 30:
+					#if secToDay(time.time() - os.stat.st_atime) > 30:
 					ingest(fullname)
+
+#Get all program directories in each program folder
+def program_file_search():
+	program_dir_1 = getProgramDirectory()
+	program_dir_2 = getProgramDirectoryx86()
+	programlist = []
+	for programdir in os.listdir(program_dir_1):
+		programlist.append(os.path.join(program_dir_1, programdir))
+	for programdir2 in os.listdir(program_dir_2):
+		programlist.append(os.path.join(program_dir_2, programdir2))
+	return programlist
+
+#Ingest all programs that are not used
+#Accept list of all directories to ingest
+def program_file_sweep():
+	programlist = program_file_search()
+	for programdir in programlist:
+		if secToDay(time.time() - os.stat(programdir).st_atime) > 180:
+			for dirname, subdirlist, filelist in os.walk(programdir):
+				for fname in filelist:
+					fullname = dirname + "/" + fname
+					if os.path.getsize(fullname) > 0:
+						if not fname.endswith('.lnk') and not fname.endswith('.url'):
+							print fullname
+							#ingest(fullname)
 
 def ingest(filename):
 	result = commitCloudFile(filename)
@@ -60,21 +96,16 @@ def ingest(filename):
 		os.remove(filename)
 		createShortcut(filename)
 
-#untested
 def getFileIcon(filename):
-	found = False
-	workdir = os.path.join(os.getcwd(),"exts")
 	new_filename, file_extension = os.path.splitext(filename)
-	sample_file = "example" + file_extension
-	for dirname, subdirlist, filelist in os.walk(workdir):
-		for fname in filelist:
-			if sample_file == fname:
-				found = True
-	if found:
-		return workdir + sample_file
-	else:
-		r = open(sample_file, 'w+')
-		r.close()
+	command1 = "assoc " + file_extension
+	#Remove unncessesary components of output
+	fileassoc = subprocess.check_output(command1, shell=True).split("=")[1]
+	command2 = "ftype " + fileassoc
+	tmp = subprocess.check_output(command2, shell=True)
+	#Remove all arguments from the output and remove quotes
+	tmp_cut = tmp.find(".exe")+4
+	return tmp[:tmp_cut].split("=", 1)[1].replace('"', "")
 
 def createShortcut(filename):
 	#Strip extension off
@@ -83,9 +114,9 @@ def createShortcut(filename):
 	shell = win32com.client.Dispatch("WScript.Shell")
 	shortcut = shell.CreateShortCut(new_filename + ".lnk")
 	#Get current directory assuming that the spawn script is in the same directory
-	shortcut.Targetpath = os.path.join(os.getcwd(), "horizon-spawn.py")
-	shortcut.Arguments = filename
-	shortcut.IconLocation = filename
+	shortcut.Targetpath = os.path.join(os.getcwd(), "horizon-spawn.pyw")
+	shortcut.Arguments = filename 
+	shortcut.IconLocation = getFileIcon(filename)
 	shortcut.save()
 
 def getDefaultDirectory():
@@ -96,9 +127,31 @@ def getDefaultDirectory():
 	else:
 		print "Critical drive or user error (missing environment variable)"
 
+def getProgramDirectory():
+	drive = os.getenv('SystemDrive')
+	if drive is not None:
+		returndir = os.path.join(drive, "/Program Files/")
+		if os.path.isdir(returndir):
+			return returndir
+		else:
+			print "Critical program files folder missing"
+	else:
+		print "Critical drive or user error (missing environment variable)"
+
+def getProgramDirectoryx86():
+	drive = os.getenv('SystemDrive')
+	if drive is not None:
+		returndir = os.path.join(drive, "/Program Files (x86)/")
+		if os.path.isdir(returndir):
+			return returndir
+		else:
+			print "Critical program files folder missing"
+	else:
+		print "Critical drive or user error (missing environment variable)"
+
 def main():
-	test = "C:\Users\Arpad\photondocs"
-	sweep(test)
+	check_reg_file_access_date()
+	program_file_sweep()
 
 if __name__ == "__main__":
 	main()
